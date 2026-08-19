@@ -1,0 +1,187 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Two hand-tuned palettes rather than an inverted one. Dark mode uses cool,
+ * slightly blue-shifted surfaces that step up in lightness as elements come
+ * forward (background -> surface -> card -> popover), so panels read as layered
+ * rather than as boxes drawn on black.
+ */
+@layer base {
+  :root {
+    --background: 210 25% 98%;
+    --surface: 210 30% 96%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 32% 94%;
+    --secondary-foreground: 222 47% 20%;
+
+    --muted: 214 32% 95%;
+    --muted-foreground: 215 16% 42%;
+
+    --accent: 214 95% 95%;
+    --accent-foreground: 221 83% 35%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 25% 88%;
+    --input: 214 25% 86%;
+    --ring: 221 83% 45%;
+
+    --status-available: 158 64% 32%;
+    --status-occupied: 221 83% 48%;
+    --status-reserved: 32 90% 42%;
+    --status-disabled: 215 14% 45%;
+
+    --chart-1: 221 83% 50%;
+    --chart-2: 158 64% 38%;
+    --chart-3: 32 90% 48%;
+    --chart-4: 262 70% 55%;
+    --chart-5: 190 80% 38%;
+    --chart-6: 340 70% 50%;
+    --chart-7: 45 80% 42%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 222 42% 9%;
+    --surface: 222 38% 12%;
+    --foreground: 210 30% 95%;
+
+    --card: 222 34% 13%;
+    --card-foreground: 210 30% 95%;
+
+    --popover: 222 34% 14%;
+    --popover-foreground: 210 30% 95%;
+
+    --primary: 217 91% 62%;
+    --primary-foreground: 222 47% 10%;
+
+    --secondary: 217 25% 20%;
+    --secondary-foreground: 210 30% 92%;
+
+    --muted: 217 25% 18%;
+    --muted-foreground: 215 18% 68%;
+
+    --accent: 217 40% 22%;
+    --accent-foreground: 213 95% 82%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 22% 22%;
+    --input: 217 22% 26%;
+    --ring: 217 91% 62%;
+
+    --status-available: 158 58% 48%;
+    --status-occupied: 217 91% 65%;
+    --status-reserved: 38 92% 58%;
+    --status-disabled: 215 14% 58%;
+
+    --chart-1: 217 91% 65%;
+    --chart-2: 158 58% 50%;
+    --chart-3: 38 92% 60%;
+    --chart-4: 265 85% 72%;
+    --chart-5: 190 85% 55%;
+    --chart-6: 340 80% 68%;
+    --chart-7: 45 90% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A single, consistent focus treatment for every interactive element. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@layer components {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@layer utilities {
+  /* Skeleton shimmer used by the loading states. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--foreground) / 0.06),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

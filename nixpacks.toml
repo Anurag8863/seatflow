@@ -1,0 +1,5 @@
+# Pins the Node major version Railway builds with. Install, build and start all
+# come from the root package.json scripts and railway.json, so there is only one
+# place to change them.
+[phases.setup]
+nixPkgs = ["nodejs_20"]

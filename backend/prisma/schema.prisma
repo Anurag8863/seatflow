@@ -1,0 +1,264 @@
+// ---------------------------------------------------------------------------
+// SeatFlow — Prisma schema
+//
+// Design notes
+//  * `Seat.status` is a denormalised projection of the seat's real state. It is
+//    always written inside the same transaction as the SeatAssignment rows, so
+//    it can be indexed and filtered cheaply without a join.
+//  * Uniqueness of *active* seat assignments is enforced by the database, not
+//    by application code. `SeatAssignment.active` is `Boolean?` and holds
+//    `true` while the assignment is live and `NULL` once released. Because
+//    PostgreSQL treats NULLs as distinct inside a unique index, the composite
+//    uniques below mean:
+//        - an employee can never hold two live seats
+//        - a seat can never be held by two employees
+//    while still allowing unlimited historical (released) rows.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------------------------------------- enums
+
+enum Role {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+}
+
+enum SeatStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  DISABLED
+}
+
+enum AreaType {
+  MEETING_ROOM
+  BREAK_ROOM
+  PHONE_BOOTH
+  RECEPTION
+  UTILITY
+  OPEN_WORKSPACE
+}
+
+enum AuditAction {
+  EMPLOYEE_ASSIGNED
+  EMPLOYEE_MOVED
+  SEAT_RELEASED
+  SEAT_DISABLED
+  SEAT_ENABLED
+  SEAT_RESERVED
+  SEAT_UNRESERVED
+  EMPLOYEE_CREATED
+  EMPLOYEE_UPDATED
+  AI_ACTION_EXECUTED
+}
+
+enum AuditSource {
+  MANUAL
+  AI
+  SYSTEM
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILED
+}
+
+enum AiActionStatus {
+  PENDING
+  EXECUTED
+  FAILED
+  CANCELLED
+  REJECTED
+  NEEDS_INPUT
+  ANSWERED
+}
+
+// -------------------------------------------------------------------- models
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(ADMIN)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs AuditLog[]
+  aiActions AIAction[]
+
+  @@index([role])
+}
+
+model Employee {
+  id           String         @id @default(cuid())
+  employeeCode String         @unique
+  name         String
+  email        String         @unique
+  department   String
+  jobTitle     String
+  status       EmployeeStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  assignments SeatAssignment[]
+  auditLogs   AuditLog[]
+
+  @@index([department])
+  @@index([status])
+  @@index([name])
+}
+
+model Building {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  code      String   @unique
+  address   String
+  createdAt DateTime @default(now())
+
+  floors Floor[]
+}
+
+model Floor {
+  id          String   @id @default(cuid())
+  buildingId  String
+  name        String
+  floorNumber Int
+  // Logical canvas size used by the seating-plan renderer (grid units).
+  gridWidth   Int      @default(26)
+  gridHeight  Int      @default(16)
+  createdAt   DateTime @default(now())
+
+  building Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  seats    Seat[]
+  areas    FloorArea[]
+
+  @@unique([buildingId, floorNumber])
+  @@index([buildingId])
+}
+
+/// Non-desk regions (meeting rooms, break rooms…) drawn behind the desks on the
+/// seating plan. Purely presentational, but stored so floor plans stay
+/// data-driven rather than hardcoded in the frontend.
+model FloorArea {
+  id      String   @id @default(cuid())
+  floorId String
+  name    String
+  type    AreaType
+  x       Int
+  y       Int
+  width   Int
+  height  Int
+
+  floor Floor @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  @@index([floorId])
+}
+
+model Seat {
+  id        String     @id @default(cuid())
+  floorId   String
+  seatCode  String     @unique
+  zone      String
+  status    SeatStatus @default(AVAILABLE)
+  notes     String?
+  xPosition Int
+  yPosition Int
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  floor       Floor            @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  assignments SeatAssignment[]
+
+  previousForAudits AuditLog[] @relation("AuditPreviousSeat")
+  newForAudits      AuditLog[] @relation("AuditNewSeat")
+
+  @@unique([floorId, xPosition, yPosition])
+  @@index([floorId])
+  @@index([status])
+  @@index([zone])
+}
+
+model SeatAssignment {
+  id         String    @id @default(cuid())
+  employeeId String
+  seatId     String
+  assignedAt DateTime  @default(now())
+  releasedAt DateTime?
+  /// `true` while live, `NULL` once released — see the schema header note.
+  active     Boolean?
+  assignedBy String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  seat     Seat     @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, active], name: "one_live_seat_per_employee")
+  @@unique([seatId, active], name: "one_live_employee_per_seat")
+  @@index([employeeId])
+  @@index([seatId])
+  @@index([assignedAt])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  userId         String?
+  action         AuditAction
+  source         AuditSource @default(MANUAL)
+  status         AuditStatus @default(SUCCESS)
+  employeeId     String?
+  previousSeatId String?
+  newSeatId      String?
+  summary        String
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  previousSeat Seat?     @relation("AuditPreviousSeat", fields: [previousSeatId], references: [id], onDelete: SetNull)
+  newSeat      Seat?     @relation("AuditNewSeat", fields: [newSeatId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([source])
+  @@index([employeeId])
+}
+
+model AIAction {
+  id           String         @id @default(cuid())
+  userId       String
+  prompt       String
+  provider     String
+  model        String?
+  /// The structured, validated command produced by the interpreter.
+  parsedAction Json
+  /// Human-readable preview shown in the confirmation card.
+  preview      Json?
+  status       AiActionStatus @default(PENDING)
+  confidence   Float?
+  result       Json?
+  errorMessage String?
+  executedAt   DateTime?
+  createdAt    DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}

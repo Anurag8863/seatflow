@@ -50,7 +50,7 @@ function shortDate(iso: string): string {
 export function DashboardPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dashboard'],
-    queryFn: async () => (await api.get<DashboardStats>('/api/dashboard')).data,
+    queryFn: async () => (await api.get<DashboardStats>('/dashboard')).data,
   });
 
   if (isError) {
